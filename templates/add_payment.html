@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h3>Record Payment</h3>
+
+<p><strong>Remaining Balance:</strong> {{ balance }}</p>
+
+<form method="POST">
+    <input class="form-control mb-2" type="number" name="amount" placeholder="Amount Paid">
+    <button class="btn btn-warning">Submit Payment</button>
+</form>
+
+{% endblock %}

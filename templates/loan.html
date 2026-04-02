@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h3>Give Loan</h3>
+
+<form method="POST">
+    <label class="form-label">Select Client</label>
+    <select class="form-control mb-2" name="client_id" required>
+        <option value="">-- Choose a client --</option>
+        {% for client in clients %}
+            <option value="{{ client[0] }}">{{ client[1] }} - {{ client[2] }}</option>
+        {% endfor %}
+    </select>
+
+    <input class="form-control mb-2" type="number" name="amount" placeholder="Amount" required>
+    <input class="form-control mb-2" type="number" name="interest" placeholder="Interest (%)" required>
+
+    <button class="btn btn-success">Create Loan</button>
+</form>
+{% endblock %}

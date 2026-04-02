@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="mb-3">
+    <a href="/add_client" class="btn btn-primary">Add Client</a>
+    <a href="/add_loan" class="btn btn-success">Give Loan</a>
+</div>
+
+<h3>Clients</h3>
+
+<div class="row mb-4">
+    <div class="col">
+        <div class="card p-3">
+            <h5>Total Given</h5>
+            <h3>{{ total_loans }}</h3>
+        </div>
+    </div>
+
+    <div class="col">
+        <div class="card p-3">
+            <h5>Total Collected</h5>
+            <h3>{{ total_collected }}</h3>
+        </div>
+    </div>
+
+    <div class="col">
+        <div class="card p-3">
+            <h5>Outstanding</h5>
+            <h3>{{ total_balance }}</h3>
+        </div>
+    </div>
+
+    <div class="col">
+        <div class="card p-3">
+            <h5>Profit</h5>
+            <h3>{{ profit }}</h3>
+        </div>
+    </div>
+</div>
+<form method="GET" action="/">
+    <input class="form-control mb-3" type="text" name="search" placeholder="Search client by name...">
+</form>
+<ul class="list-group">
+    {% for client in clients %}
+        <li class="list-group-item d-flex justify-content-between">
+            <span>{{ client[1] }} - {{ client[2] }}</span>
+            <a href="/client/{{ client[0] }}" class="btn btn-sm btn-info">View Loans</a>
+        </li>
+    {% endfor %}
+</ul>
+
+{% endblock %}

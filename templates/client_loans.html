@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<h3>{{ client[1] }}'s Loans</h3>
+
+<a href="/" class="btn btn-secondary mb-3">Back</a>
+
+<table class="table table-bordered">
+    <tr>
+        <th>Amount</th>
+        <th>Total</th>
+        <th>Paid</th>
+        <th>Balance</th>
+        <th>Status</th>
+        <th>Action</th>
+    </tr>
+
+    {% for loan in loans %}
+    <tr>
+        <td>{{ loan[2] }}</td>
+        <td>{{ loan[4] }}</td>
+        <td>{{ payments[loan[0]] }}</td>
+        <td>{{ loan[5] }}</td>
+        <td>
+            {% if loan[5] <= 0 %}
+                <span class="text-success">Paid</span>
+            {% else %}
+                <span class="text-danger">Owing</span>
+            {% endif %}
+        </td>
+        <td>
+            <a href="/add_payment/{{ loan[0] }}" class="btn btn-sm btn-warning">Pay</a>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+{% endblock %}
