@@ -8,15 +8,6 @@ app = Flask(__name__)
 app.secret_key = "secret123"
 
 
-def login_required(view):
-    @wraps(view)
-    def wrapped_view(*args, **kwargs):
-        if "user" not in session:
-            return redirect(url_for("login"))
-        return view(*args, **kwargs)
-    return wrapped_view
-
-
 # -------------------
 # DATABASE SETUP
 # -------------------
@@ -74,6 +65,17 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+with app.app_context():
+    init_db()
+
+def login_required(view):
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if "user" not in session:
+            return redirect(url_for("login"))
+        return view(*args, **kwargs)
+    return wrapped_view
 
 
 # -------------------
