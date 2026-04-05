@@ -115,49 +115,11 @@ def logout():
 
 # -------------------
 # DASHBOARD
-# -------------------
+# ----------
+
 @app.route("/")
-@login_required
 def index():
-    conn = get_db_connection()
-    c = conn.cursor()
-
-    search = request.args.get("search", "").strip()
-
-    if search:
-        c.execute("SELECT * FROM clients WHERE name LIKE %s ORDER BY id DESC", (f"%{search}%",))
-    else:
-        c.execute("SELECT * FROM clients ORDER BY id DESC")
-
-    clients = c.fetchall()
-
-    # FIXED STATS
-    c.execute("SELECT SUM(amount) FROM loans")
-    row = c.fetchone()
-    total_loans = row[0] if row and row[0] else 0
-
-    c.execute("SELECT SUM(amount) FROM payments")
-    row = c.fetchone()
-    total_collected = row[0] if row and row[0] else 0
-
-    c.execute("SELECT SUM(balance) FROM loans")
-    row = c.fetchone()
-    total_balance = row[0] if row and row[0] else 0
-
-    profit = total_collected - total_loans
-
-    conn.close()
-
-    return render_template(
-        "index.html",
-        clients=clients,
-        total_loans=total_loans,
-        total_collected=total_collected,
-        total_balance=total_balance,
-        profit=profit
-    )
-
-
+    return "App is working"
 # -------------------
 # ADD CLIENT
 # -------------------
