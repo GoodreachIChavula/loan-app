@@ -158,21 +158,22 @@ def index():
 @login_required
 def add_client():
     if request.method == "POST":
-        name = request.form["name"].strip()
-        phone = request.form["phone"].strip()
+        try:
+            name = request.form["name"].strip()
+            phone = request.form["phone"].strip()
 
-        conn = get_db_connection()
-        c = conn.cursor()
-        c.execute("INSERT INTO clients (name, phone) VALUES (%s, %s)", (name, phone))
-        conn.commit()
-        conn.close()
+            conn = get_db_connection()
+            c = conn.cursor()
+            c.execute("INSERT INTO clients (name, phone) VALUES (%s, %s)", (name, phone))
+            conn.commit()
+            conn.close()
 
-        return redirect(url_for("index"))
+            return redirect(url_for("index"))
 
-    return render_template("add_client.html")
+        except Exception as e:
+            return f"ERROR: {e}"
 
-
-# -------------------
+    return render_template("add_client.html")# -------------------
 # ADD LOAN
 # -------------------
 @app.route("/add_loan", methods=["GET", "POST"])
@@ -182,29 +183,30 @@ def add_loan():
     c = conn.cursor()
 
     if request.method == "POST":
-        client_id = request.form["client_id"]
-        amount = float(request.form["amount"])
-        interest = float(request.form["interest"])
+        try:
+            client_id = request.form["client_id"]
+            amount = float(request.form["amount"])
+            interest = float(request.form["interest"])
 
-        total = amount + (amount * interest / 100)
+            total = amount + (amount * interest / 100)
 
-        c.execute(
-            "INSERT INTO loans (client_id, amount, interest, total, balance) VALUES (%s, %s, %s, %s, %s)",
-            (client_id, amount, interest, total, total)
-        )
+            c.execute(
+                "INSERT INTO loans (client_id, amount, interest, total, balance) VALUES (%s, %s, %s, %s, %s)",
+                (client_id, amount, interest, total, total)
+            )
 
-        conn.commit()
-        conn.close()
-        return redirect(url_for("index"))
+            conn.commit()
+            conn.close()
+            return redirect(url_for("index"))
 
-    c.execute("SELECT id, name FROM clients ORDER BY name ASC")
+        except Exception as e:
+            return f"ERROR: {e}"
+
+    c.execute("SELECT id, name FROM clients")
     clients = c.fetchall()
     conn.close()
 
-    return render_template("loan.html", clients=clients)
-
-
-# -------------------
+    return render_template("loan.html", clients=clients)# -------------------
 # ADD PAYMENT
 # -------------------
 @app.route("/add_payment/<int:loan_id>", methods=["GET", "POST"])
