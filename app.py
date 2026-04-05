@@ -1,20 +1,19 @@
 from functools import wraps
-
 from flask import Flask, render_template, request, redirect, session, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
-
 import os
 import psycopg2
 
+app = Flask(__name__)
+app.secret_key = "secret123"
+
 DATABASE_URL = os.environ.get("DATABASE_URL")
+
 
 def get_db_connection():
     if not DATABASE_URL:
         raise Exception("DATABASE_URL is not set!")
     return psycopg2.connect(DATABASE_URL, sslmode='require')
-
-app = Flask(__name__)
-app.secret_key = "secret123"
 
 
 # -------------------
@@ -59,7 +58,7 @@ def init_db():
     )
     """)
 
-    # Create admin user
+    # Create admin
     c.execute("SELECT * FROM users WHERE username=%s", ("admin",))
     if not c.fetchone():
         hashed_password = generate_password_hash("1234")
@@ -70,7 +69,11 @@ def init_db():
 
     conn.commit()
     conn.close()
-    
+
+
+# -------------------
+# AUTH DECORATOR
+# -------------------
 def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
@@ -81,7 +84,7 @@ def login_required(view):
 
 
 # -------------------
-# LOGIN / LOGOUT
+# LOGIN
 # -------------------
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -91,7 +94,7 @@ def login():
 
         conn = get_db_connection()
         c = conn.cursor()
-        c.execute("SELECT id, username, password FROM users WHERE username = %s", (username,))
+        c.execute("SELECT id, username, password FROM users WHERE username=%s", (username,))
         user = c.fetchone()
         conn.close()
 
@@ -113,7 +116,7 @@ def logout():
 # -------------------
 # DASHBOARD
 # -------------------
-@app.route("/", methods=["GET"])
+@app.route("/")
 @login_required
 def index():
     conn = get_db_connection()
@@ -125,17 +128,22 @@ def index():
         c.execute("SELECT * FROM clients WHERE name LIKE %s ORDER BY id DESC", (f"%{search}%",))
     else:
         c.execute("SELECT * FROM clients ORDER BY id DESC")
+
     clients = c.fetchall()
 
+    # FIXED STATS
     c.execute("SELECT SUM(amount) FROM loans")
     row = c.fetchone()
     total_loans = row[0] if row and row[0] else 0
+
     c.execute("SELECT SUM(amount) FROM payments")
     row = c.fetchone()
-    total_loans = row[0] if row and row[0] else 0
+    total_collected = row[0] if row and row[0] else 0
+
     c.execute("SELECT SUM(balance) FROM loans")
     row = c.fetchone()
-    total_loans = row[0] if row and row[0] else 0
+    total_balance = row[0] if row and row[0] else 0
+
     profit = total_collected - total_loans
 
     conn.close()
@@ -160,9 +168,6 @@ def add_client():
         name = request.form["name"].strip()
         phone = request.form["phone"].strip()
 
-        if not name:
-            return "Client name is required"
-
         conn = get_db_connection()
         c = conn.cursor()
         c.execute("INSERT INTO clients (name, phone) VALUES (%s, %s)", (name, phone))
@@ -184,15 +189,9 @@ def add_loan():
     c = conn.cursor()
 
     if request.method == "POST":
-        client_id = request.form["client_id"].strip()
+        client_id = request.form["client_id"]
         amount = float(request.form["amount"])
         interest = float(request.form["interest"])
-
-        c.execute("SELECT id FROM clients WHERE id = %s", (client_id,))
-        client = c.fetchone()
-        if client is None:
-            conn.close()
-            return "Client not found"
 
         total = amount + (amount * interest / 100)
 
@@ -200,44 +199,16 @@ def add_loan():
             "INSERT INTO loans (client_id, amount, interest, total, balance) VALUES (%s, %s, %s, %s, %s)",
             (client_id, amount, interest, total, total)
         )
+
         conn.commit()
         conn.close()
         return redirect(url_for("index"))
 
-    c.execute("SELECT id, name, phone FROM clients ORDER BY name ASC")
+    c.execute("SELECT id, name FROM clients ORDER BY name ASC")
     clients = c.fetchall()
     conn.close()
 
     return render_template("loan.html", clients=clients)
-
-# -------------------
-# VIEW CLIENT LOANS
-# -------------------
-@app.route("/client/<int:client_id>")
-@login_required
-def view_client(client_id):
-    conn = get_db_connection()
-    c = conn.cursor()
-
-    c.execute("SELECT * FROM clients WHERE id = %s", (client_id,))
-    client = c.fetchone()
-
-    if client is None:
-        conn.close()
-        return "Client not found", 404
-
-    c.execute("SELECT * FROM loans WHERE client_id = %s ORDER BY id DESC", (client_id,))
-    loans = c.fetchall()
-
-    payments = {}
-    for loan in loans:
-        c.execute("SELECT SUM(amount) FROM payments WHERE loan_id = %s", (loan[0],))
-        total_paid = c.fetchone()[0]
-        payments[loan[0]] = total_paid if total_paid else 0
-
-    conn.close()
-
-    return render_template("client_loans.html", client=client, loans=loans, payments=payments)
 
 
 # -------------------
@@ -249,32 +220,25 @@ def add_payment(loan_id):
     conn = get_db_connection()
     c = conn.cursor()
 
-    c.execute("SELECT balance FROM loans WHERE id = %s", (loan_id,))
+    c.execute("SELECT balance FROM loans WHERE id=%s", (loan_id,))
     row = c.fetchone()
 
-    if row is None:
-        conn.close()
-        return "Loan not found", 404
+    if not row:
+        return "Loan not found"
 
     balance = row[0]
 
     if request.method == "POST":
         amount = float(request.form["amount"])
 
-        if amount <= 0:
-            conn.close()
-            return "Payment must be greater than zero"
-
         if amount > balance:
-            conn.close()
-            return "Error: Payment exceeds remaining balance!"
+            return "Too much payment"
 
         c.execute("INSERT INTO payments (loan_id, amount) VALUES (%s, %s)", (loan_id, amount))
-        c.execute("UPDATE loans SET balance = balance - %s WHERE id = %s", (amount, loan_id))
+        c.execute("UPDATE loans SET balance = balance - %s WHERE id=%s", (amount, loan_id))
 
         conn.commit()
         conn.close()
-
         return redirect(url_for("index"))
 
     conn.close()
@@ -282,9 +246,8 @@ def add_payment(loan_id):
 
 
 # -------------------
-# RUN APP
+# RUN
 # -------------------
-init_db()
-
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=10000)
+    init_db()
+    app.run(host="0.0.0.0", port=10000)
