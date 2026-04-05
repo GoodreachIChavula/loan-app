@@ -11,7 +11,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 def get_db_connection():
     if not DATABASE_URL:
         raise Exception("DATABASE_URL is not set!")
-    return psycopg2.connect(DATABASE_URL)
+    return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 app = Flask(__name__)
 app.secret_key = "secret123"
@@ -128,14 +128,14 @@ def index():
     clients = c.fetchall()
 
     c.execute("SELECT SUM(amount) FROM loans")
-    total_loans = c.fetchone()[0] or 0
-
+    row = c.fetchone()
+    total_loans = row[0] if row and row[0] else 0
     c.execute("SELECT SUM(amount) FROM payments")
-    total_collected = c.fetchone()[0] or 0
-
+    row = c.fetchone()
+    total_loans = row[0] if row and row[0] else 0
     c.execute("SELECT SUM(balance) FROM loans")
-    total_balance = c.fetchone()[0] or 0
-
+    row = c.fetchone()
+    total_loans = row[0] if row and row[0] else 0
     profit = total_collected - total_loans
 
     conn.close()
