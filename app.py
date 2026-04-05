@@ -119,7 +119,7 @@ def logout():
 
 @app.route("/")
 def index():
-    return "App is working"
+    return render_template("index.html")
 # -------------------
 # ADD CLIENT
 # -------------------
