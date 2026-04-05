@@ -9,6 +9,8 @@ import psycopg2
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def get_db_connection():
+    if not DATABASE_URL:
+        raise Exception("DATABASE_URL is not set!")
     return psycopg2.connect(DATABASE_URL)
 
 app = Flask(__name__)
@@ -22,28 +24,25 @@ def init_db():
     conn = get_db_connection()
     c = conn.cursor()
 
-    # USERS TABLE
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         username TEXT UNIQUE,
         password TEXT
     )
     """)
 
-    # CLIENTS TABLE
     c.execute("""
     CREATE TABLE IF NOT EXISTS clients (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         name TEXT,
         phone TEXT
     )
     """)
 
-    # LOANS TABLE
     c.execute("""
     CREATE TABLE IF NOT EXISTS loans (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         client_id INTEGER,
         amount REAL,
         interest REAL,
@@ -52,18 +51,17 @@ def init_db():
     )
     """)
 
-    # PAYMENTS TABLE
     c.execute("""
     CREATE TABLE IF NOT EXISTS payments (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         loan_id INTEGER,
         amount REAL
     )
     """)
 
-    # Default admin user
-    c.execute("SELECT id FROM users WHERE username = %s", ("admin",))
-    if c.fetchone() is None:
+    # Create admin user
+    c.execute("SELECT * FROM users WHERE username=%s", ("admin",))
+    if not c.fetchone():
         hashed_password = generate_password_hash("1234")
         c.execute(
             "INSERT INTO users (username, password) VALUES (%s, %s)",
@@ -72,10 +70,7 @@ def init_db():
 
     conn.commit()
     conn.close()
-
-with app.app_context():
-    init_db()
-
+    
 def login_required(view):
     @wraps(view)
     def wrapped_view(*args, **kwargs):
