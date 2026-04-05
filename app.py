@@ -118,9 +118,40 @@ def logout():
 # ----------
 
 @app.route("/")
+@login_required
 def index():
-    return render_template("index.html")
-# -------------------
+    conn = get_db_connection()
+    c = conn.cursor()
+
+    try:
+        c.execute("SELECT * FROM clients ORDER BY id DESC")
+        clients = c.fetchall()
+
+        c.execute("SELECT COALESCE(SUM(amount),0) FROM loans")
+        total_loans = c.fetchone()[0]
+
+        c.execute("SELECT COALESCE(SUM(amount),0) FROM payments")
+        total_collected = c.fetchone()[0]
+
+        c.execute("SELECT COALESCE(SUM(balance),0) FROM loans")
+        total_balance = c.fetchone()[0]
+
+        profit = total_collected - total_loans
+
+    except Exception as e:
+        conn.close()
+        return f"Database error: {e}"
+
+    conn.close()
+
+    return render_template(
+        "index.html",
+        clients=clients,
+        total_loans=total_loans,
+        total_collected=total_collected,
+        total_balance=total_balance,
+        profit=profit
+    )# -------------------
 # ADD CLIENT
 # -------------------
 @app.route("/add_client", methods=["GET", "POST"])
