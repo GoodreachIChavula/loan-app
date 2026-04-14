@@ -1,19 +1,19 @@
 from functools import wraps
 from flask import Flask, render_template, request, redirect, session, url_for
 from werkzeug.security import generate_password_hash, check_password_hash
-import os
-import psycopg2
+import sqlite3
 
 app = Flask(__name__)
 app.secret_key = "secret123"
 
-DATABASE_URL = os.environ.get("DATABASE_URL")
 
-
+# -------------------
+# DATABASE CONNECTIONN
+# -------------------
 def get_db_connection():
-    if not DATABASE_URL:
-        raise Exception("DATABASE_URL is not set!")
-    return psycopg2.connect(DATABASE_URL, sslmode='require')
+    conn = sqlite3.connect("database.db")
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 # -------------------
@@ -25,7 +25,7 @@ def init_db():
 
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE,
         password TEXT
     )
@@ -33,7 +33,7 @@ def init_db():
 
     c.execute("""
     CREATE TABLE IF NOT EXISTS clients (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
         phone TEXT
     )
@@ -41,7 +41,7 @@ def init_db():
 
     c.execute("""
     CREATE TABLE IF NOT EXISTS loans (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_id INTEGER,
         amount REAL,
         interest REAL,
@@ -52,18 +52,18 @@ def init_db():
 
     c.execute("""
     CREATE TABLE IF NOT EXISTS payments (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         loan_id INTEGER,
         amount REAL
     )
     """)
 
     # Create admin
-    c.execute("SELECT * FROM users WHERE username=%s", ("admin",))
+    c.execute("SELECT * FROM users WHERE username=?", ("admin",))
     if not c.fetchone():
         hashed_password = generate_password_hash("1234")
         c.execute(
-            "INSERT INTO users (username, password) VALUES (%s, %s)",
+            "INSERT INTO users (username, password) VALUES (?, ?)",
             ("admin", hashed_password)
         )
 
@@ -94,12 +94,12 @@ def login():
 
         conn = get_db_connection()
         c = conn.cursor()
-        c.execute("SELECT id, username, password FROM users WHERE username=%s", (username,))
+        c.execute("SELECT * FROM users WHERE username=?", (username,))
         user = c.fetchone()
         conn.close()
 
-        if user and check_password_hash(user[2], password):
-            session["user"] = user[1]
+        if user and check_password_hash(user["password"], password):
+            session["user"] = user["username"]
             return redirect(url_for("index"))
 
         return "Invalid credentials"
@@ -115,32 +115,33 @@ def logout():
 
 # -------------------
 # DASHBOARD
-# ----------
-
+# -------------------
 @app.route("/")
 @login_required
 def index():
     conn = get_db_connection()
     c = conn.cursor()
 
-    try:
+    search = request.args.get("search", "").strip()
+
+    if search:
+        c.execute("SELECT * FROM clients WHERE name LIKE ?", (f"%{search}%",))
+    else:
         c.execute("SELECT * FROM clients ORDER BY id DESC")
-        clients = c.fetchall()
 
-        c.execute("SELECT COALESCE(SUM(amount),0) FROM loans")
-        total_loans = c.fetchone()[0]
+    clients = c.fetchall()
 
-        c.execute("SELECT COALESCE(SUM(amount),0) FROM payments")
-        total_collected = c.fetchone()[0]
+    # Stats
+    c.execute("SELECT COALESCE(SUM(amount),0) FROM loans")
+    total_loans = c.fetchone()[0]
 
-        c.execute("SELECT COALESCE(SUM(balance),0) FROM loans")
-        total_balance = c.fetchone()[0]
+    c.execute("SELECT COALESCE(SUM(amount),0) FROM payments")
+    total_collected = c.fetchone()[0]
 
-        profit = total_collected - total_loans
+    c.execute("SELECT COALESCE(SUM(balance),0) FROM loans")
+    total_balance = c.fetchone()[0]
 
-    except Exception as e:
-        conn.close()
-        return f"Database error: {e}"
+    profit = total_collected - total_loans
 
     conn.close()
 
@@ -151,29 +152,31 @@ def index():
         total_collected=total_collected,
         total_balance=total_balance,
         profit=profit
-    )# -------------------
+    )
+
+
+# -------------------
 # ADD CLIENT
 # -------------------
 @app.route("/add_client", methods=["GET", "POST"])
 @login_required
 def add_client():
     if request.method == "POST":
-        try:
-            name = request.form["name"].strip()
-            phone = request.form["phone"].strip()
+        name = request.form["name"]
+        phone = request.form["phone"]
 
-            conn = get_db_connection()
-            c = conn.cursor()
-            c.execute("INSERT INTO clients (name, phone) VALUES (%s, %s)", (name, phone))
-            conn.commit()
-            conn.close()
+        conn = get_db_connection()
+        c = conn.cursor()
+        c.execute("INSERT INTO clients (name, phone) VALUES (?, ?)", (name, phone))
+        conn.commit()
+        conn.close()
 
-            return redirect(url_for("index"))
+        return redirect(url_for("index"))
 
-        except Exception as e:
-            return f"ERROR: {e}"
+    return render_template("add_client.html")
 
-    return render_template("add_client.html")# -------------------
+
+# -------------------
 # ADD LOAN
 # -------------------
 @app.route("/add_loan", methods=["GET", "POST"])
@@ -183,30 +186,29 @@ def add_loan():
     c = conn.cursor()
 
     if request.method == "POST":
-        try:
-            client_id = request.form["client_id"]
-            amount = float(request.form["amount"])
-            interest = float(request.form["interest"])
+        client_id = request.form["client_id"]
+        amount = float(request.form["amount"])
+        interest = float(request.form["interest"])
 
-            total = amount + (amount * interest / 100)
+        total = amount + (amount * interest / 100)
 
-            c.execute(
-                "INSERT INTO loans (client_id, amount, interest, total, balance) VALUES (%s, %s, %s, %s, %s)",
-                (client_id, amount, interest, total, total)
-            )
+        c.execute(
+            "INSERT INTO loans (client_id, amount, interest, total, balance) VALUES (?, ?, ?, ?, ?)",
+            (client_id, amount, interest, total, total)
+        )
 
-            conn.commit()
-            conn.close()
-            return redirect(url_for("index"))
-
-        except Exception as e:
-            return f"ERROR: {e}"
+        conn.commit()
+        conn.close()
+        return redirect(url_for("index"))
 
     c.execute("SELECT id, name FROM clients")
     clients = c.fetchall()
     conn.close()
 
-    return render_template("loan.html", clients=clients)# -------------------
+    return render_template("loan.html", clients=clients)
+
+
+# -------------------
 # ADD PAYMENT
 # -------------------
 @app.route("/add_payment/<int:loan_id>", methods=["GET", "POST"])
@@ -215,7 +217,7 @@ def add_payment(loan_id):
     conn = get_db_connection()
     c = conn.cursor()
 
-    c.execute("SELECT balance FROM loans WHERE id=%s", (loan_id,))
+    c.execute("SELECT balance FROM loans WHERE id=?", (loan_id,))
     row = c.fetchone()
 
     if not row:
@@ -229,8 +231,8 @@ def add_payment(loan_id):
         if amount > balance:
             return "Too much payment"
 
-        c.execute("INSERT INTO payments (loan_id, amount) VALUES (%s, %s)", (loan_id, amount))
-        c.execute("UPDATE loans SET balance = balance - %s WHERE id=%s", (amount, loan_id))
+        c.execute("INSERT INTO payments (loan_id, amount) VALUES (?, ?)", (loan_id, amount))
+        c.execute("UPDATE loans SET balance = balance - ? WHERE id=?", (amount, loan_id))
 
         conn.commit()
         conn.close()
@@ -245,4 +247,4 @@ def add_payment(loan_id):
 # -------------------
 if __name__ == "__main__":
     init_db()
-    app.run(host="0.0.0.0", port=10000)
+    app.run(debug=True)
